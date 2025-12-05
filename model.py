@@ -3,6 +3,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+# Welcome:
+'''
+This is either gonna get educative or weird any way
+i gotta say this before i forget we'll be using a mix of Hydra and DictConfig
+from omegaConf for our configuration management
+'''
+
+'''
+Yeah you saw that am sorry what a bummer!
+ Yes (scaled-dot-product attention) don't mind me am on the wa to implement Grouped Query attention but i keep on forgetting
+'''
+'''
+TODO:
+-Change attention to GQA(Grouped Query Attention)
+-Implement Flash Attention for optimization
+-Implement model parallelism for large models
+-Change LayerNorm to RMSNorm for better training stability
+-Change posditional encoding to rotary embeddings for better extrapolation
+-Change initialization to SwiGLU for better convergence
+'''
+# If you can help with that TODO feel free to send a pull request : Thankyou in advance
+
+# Helper function to create look-ahead mask
 def look_ahead_mask(seq_length):
     mask = torch.ones(seq_length,seq_length)
     mask = torch.tril(mask)

@@ -2,6 +2,9 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 from torch.nn.utils.rnn import pad_sequence
 import tiktoken
+from omegaconf import DictConfig
+
+# Padding to make all sequences in the batch of equal length
 
 def collate_fn(batch):
     input_ids = [item['input_ids'] for item in batch]
@@ -16,9 +19,10 @@ def collate_fn(batch):
     }
 
 class TextDataset(Dataset):
-    def __init__(self, file_path, max_length, tokenizer_name='cl100k_base'):
+    def __init__(self,cfg:DictConfig, file_path, max_length, tokenizer_name):
         super().__init__()
-        self.tokenizer = tiktoken.get_encoding(tokenizer_name)
+        self.tokenizor_name = cfg.data.tokenizor_name
+        self.tokenizer = tiktoken.get_encoding(self.tokenizer_name)
         self.max_length = max_length
         
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -27,10 +31,10 @@ class TextDataset(Dataset):
         self.all_tokens = self.tokenizer.encode(self.full_text)
     
     def __len__(self):
-        return len(self.all_tokens) - self.max_length
+        return len(self.all_tokens) - self.max_length # We are creating a sliding window that's why we subtract max_length
     
     def __getitem__(self, idx):
-        chunk = self.all_tokens[idx:idx + self.max_length + 1]
+        chunk = self.all_tokens[idx:idx + self.max_length + 1] # Adding one since target requires input shifted by one
         
         input_ids = torch.tensor(chunk[:-1], dtype=torch.long)
         target_ids = torch.tensor(chunk[1:], dtype=torch.long)
@@ -40,7 +44,12 @@ class TextDataset(Dataset):
             'target_ids': target_ids
         }
 
-def get_data_loader(file_path, batch_size=32, block_size=512, tokenizer_name='cl100k_base'):
+def get_data_loader(cfg : DictConfig,file_path, batch_size, block_size, tokenizer_name):
+    file_path = cfg.data.data_path
+    batch_size = cfg.training.batch_size
+    block_size = cfg.data.block_size
+    tokenizor_name = cfg.data.tokenizer_name
+
     dataset = TextDataset(
         file_path=file_path,
         max_length=block_size,
