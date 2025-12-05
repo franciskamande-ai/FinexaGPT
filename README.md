@@ -1,7 +1,7 @@
-FinexaGPT:Transformer Implementation
+# FinexaGPT:Transformer Implementation
 A clean, readable GPT implementation that actually makes sense. No magic, no bloat - just the transformer architecture you can understand in an afternoon.
 
-⚡ What This Is
+# ⚡ What This Is
 A minimal GPT-like transformer implementation
 
 134M parameter model (like a tiny GPT-2)
@@ -12,7 +12,7 @@ Production-ready data pipeline
 
 Everything fits in one file (almost)
 
-🚀 What This Is NOT
+# 🚀 What This Is NOT
 ❌ Not a 1-trillion parameter model
 
 ❌ Not a framework with 1000 dependencies
@@ -21,7 +21,7 @@ Everything fits in one file (almost)
 
 ❌ Not pretending to be something it's not
 
-📁 Files 
+# 📁 Files 
 text
 .
 ├── model.py              # The transformer (134M params)
@@ -49,7 +49,7 @@ from model import Transformer
 
 model = Transformer(vocab_size=50000)
 # Load checkpoint
-# model.load_state_dict(torch.load("checkpoint.pt"))
+model.load_state_dict(torch.load("checkpoint.pt"))
 
 output = model.generate(
     idx=torch.tensor([[1, 2, 3]]),  # Your tokens
@@ -60,20 +60,20 @@ print(output)
 🧠 The Model (model.py)
 python
 # What you get:
-# - Multi-head attention with causal masking
-# - Feed-forward networks (GELU)
-# - Layer normalization & dropout
-# - Learned positional embeddings
-# - Next-token prediction
-# - Temperature/top-k sampling
+#### - Multi-head attention with causal masking
+#### - Feed-forward networks (GELU)
+#### - Layer normalization & dropout
+#### - Learned positional embeddings
+#### - Next-token prediction
+#### - Temperature/top-k sampling
 
 # What's TODO (help wanted!):
-# - GQA (Grouped Query Attention)
-# - Flash Attention optimization  
-# - RMSNorm instead of LayerNorm
-# - Rotary positional embeddings
-# - SwiGLU activation
-📊 Specs
+#### - GQA (Grouped Query Attention)
+#### - Flash Attention optimization  
+#### - RMSNorm instead of LayerNorm
+#### - Rotary positional embeddings
+#### - SwiGLU activation
+# 📊 Specs
 Parameters: 134M (configurable)
 
 Context: 512 tokens (extendable)
