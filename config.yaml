@@ -37,7 +37,7 @@ data:
   
   tokenizer_type: "char"  # "char", "bpe", "word"
   vocab_size: 50000
-  
+  tokenizor_name: "cl100k_base"
   shuffle: true
   pin_memory: true
 
