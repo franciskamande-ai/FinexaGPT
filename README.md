@@ -12,6 +12,13 @@ Production-ready data pipeline
 
 Everything fits in one file (almost)
 
+# 🎯 Why FinexaGPT?
+
+While there are many transformer implementations, FinexaGPT is:
+- **Financial-domain ready** (optimized for earnings calls, SEC filings, market data)
+- **Actually readable** (most implementations are abstracted into oblivion)
+- **Built for extension** (clean architecture for adding financial-specific features)
+
 # 🚀 What This Is NOT
 ❌ Not a 1-trillion parameter model
 
