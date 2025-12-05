@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+*.env
+.venv
+
+# Virtual environments
+.virtualenv/
+.vscode/
+.idea/
+.DS_Store
+
+# Model files (add specific patterns if needed)
+# *.bin
+# *.pth
+# *.safetensors
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Large data files
+*.csv
+*.json
+*.pkl
+*.h5

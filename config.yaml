@@ -1,0 +1,57 @@
+model:
+  name: "transformer"
+  d_model: 768
+  n_heads: 12
+  n_layers: 12
+  dropout: 0.1
+  vocab_size: 50000
+  max_seq_length: 512
+  
+  embedding_dim: 768
+  use_positional_encoding: true
+  
+  init_method: "xavier_uniform"
+
+training:
+  learning_rate: 3e-4
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  
+  num_warmup_steps: 2000
+  num_training_steps: 100000
+  min_lr: 0.0
+  
+  batch_size: 32
+  num_epochs: 10
+  gradient_clip: 1.0
+  
+  save_every: 1000
+  checkpoint_dir: "./checkpoints"
+
+data:
+  dataset_name: "openwebtext"  # or "local:file.txt"
+  data_path: "./data"
+  block_size: 512
+  num_workers: 4
+  
+  tokenizer_type: "char"  # "char", "bpe", "word"
+  vocab_size: 50000
+  
+  shuffle: true
+  pin_memory: true
+
+system:
+  seed: 42
+  device: "cuda"  # "cuda" or "cpu"
+  mixed_precision: true
+  compile_model: false  # torch.compile
+  
+  log_dir: "./logs"
+  log_every: 100
+  wandb_project: "transformer-training"  # set to null to disable
+  
+  # Evaluation
+  eval_every: 1000
+  eval_batches: 20
+  generate_samples: true
