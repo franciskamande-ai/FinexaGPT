@@ -7,14 +7,14 @@ import tqdm
 '''
 There is an error here:
 The train_epoch function tries to enumerate a tuple
-while our dataset class return's a dictionary ot input/output_ids
+while our dataset class return's a dictionary ot input/output_ids  # SOLVED
 Fix: access data n the epoch via batch['input_ids']
 WILL DO IT LATER
 '''
 
 '''
 Implementing tqdm to show progress could be fun 
-and maybe beneficial to the one  training
+and maybe beneficial to the one  training        # SOLVED
 '''
 
 class Trainer(nn.Module):
@@ -75,10 +75,11 @@ class Trainer(nn.Module):
     def train_epoch(self, dataloader, epoch):
         self.model.train()
         total_loss = 0
+
+        progress_bar = tqdm(dataloader,desc=f"Training epoch(step: {self.current_step})")
         
-        for batch_idx, (x, y) in enumerate(dataloader):
-            device = next(self.model.parameters()).device
-            x, y = x.to(device), y.to(device)
+        for batch_idx,batch in enumerate(progress_bar):
+            x, y = batch["input_ids"].to(self.model.token_embeddings.weight.device), batch["target_ids"].to(self.model.token_embeddings.weight.device)
             
             logits, loss = self.model(x, targets=y)
             
@@ -92,14 +93,18 @@ class Trainer(nn.Module):
             
             total_loss += loss.item()
             self.current_step += 1
+
+            current_lr = self.scheduler.get_last_lr()[0]
+            progress_bar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{current_lr:.6f}")
             
-            if batch_idx % self.cfg.system.log_every == 0:
-                current_lr = self.scheduler.get_last_lr()[0]
-                print(f"  Step {self.current_step}: Loss={loss.item():.4f}, LR={current_lr:.6f}")
+            if self.current_step % self.cfg.system.log_every == 0:
+                self.save_checkpoint(f"{self.path}/checkpoint_step_{self.current_step}.pt")
         
         return total_loss / len(dataloader)
 
     def save_checkpoint(self, path):
+        import os
+        os.makedirs(self.path,exist_ok=True)
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
