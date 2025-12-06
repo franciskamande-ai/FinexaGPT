@@ -71,7 +71,7 @@ class MultiHeadAttention(nn.Module):
         Q = self.w_q(x).view(batch_size,seq_length,self.num_heads,self.d_k).transpose(1,2)
         V = self.w_v(x).view(batch_size,seq_length,self.num_heads,self.d_k).transpose(1,2)
 
-        scores = torch.matmul(Q,K.transpose(1,2))/self.scale
+        scores = torch.matmul(Q,K.transpose(-2,-1))/self.scale
 
         if mask is None:
             mask = look_ahead_mask(seq_length).to(x.device)
