@@ -12,7 +12,8 @@ from omegaConf for our configuration management
 
 '''
 Yeah you saw that am sorry what a bummer!
- Yes (scaled-dot-product attention) don't mind me am on the wa to implement Grouped Query attention but i keep on forgetting
+ Yes (scaled-dot-product attention) don't mind
+ me am on the way to implement Grouped Query attention but i keep on forgetting
 '''
 '''
 TODO:
@@ -20,8 +21,8 @@ TODO:
 -Implement Flash Attention for optimization
 -Implement model parallelism for large models
 -Change LayerNorm to RMSNorm for better training stability
--Change posditional encoding to rotary embeddings for better extrapolation
--Change initialization to SwiGLU for better convergence
+-Change positional encoding to rotary embeddings for better extrapolation
+-Change initialization to SwiGLU for better convergence ==> DONE(By:https://github.com/franciskamande-ai/)
 '''
 # If you can help with that TODO feel free to send a pull request : Thankyou in advance
 
@@ -87,15 +88,15 @@ class MultiHeadAttention(nn.Module):
         scores = self.w_0(scores)
         return scores
 
-class FeedForward(nn.Module):
+class SwiGLUFFN(nn.Module):
     def __init__(self,d_model,init_method = "xavier_uniform",dropout = 0.1):
         super().__init__()
         self.init_method = init_method
         self.d_model = d_model
         self.layer1  = nn.Linear(self.d_model,self.d_model*4)
-        self.layer2 = nn.Linear(self.d_model*4,self.d_model)
+        self.layer2 = nn.Linear(self.d_model,self.d_model*4)
+        self.layer3 = nn.Linear(self.d_model*4,self.d_model)
         self.dropout = nn.Dropout(dropout)
-        self.gelu = nn.GELU()
 
         self._initialize_weights()
 
@@ -113,21 +114,26 @@ class FeedForward(nn.Module):
         if self.init_method == "xavier_normal":
             nn.init.xavier_normal_(self.layer2.weight)
 
-        if self.layer2.bias is not None:
-            nn.init.constant_(self.layer2.bias,0.0)
+        if self.layer3.bias is not None:
+            nn.init.constant_(self.layer3.bias,0.0)
+        if self.init_method == "xavier_uniform":
+            nn.init.xavier_uniform_(self.layer3.weight)
+        if self.init_method == "xavier_normal":
+            nn.init.xavier_normal_(self.layer3.weight)
+
+        if self.layer3.bias is not None:
+            nn.init.constant_(self.layer3.bias,0.0)
 
     def forward(self,x):
-        x = self.layer1(x)
-        x = self.gelu(x)
-        x = self.dropout(x)
-        x = self.layer2(x)
-        return x
+     gate = F.silu(self.layer2)
+     activated = self.layer1 * gate
+        return self.layer3(activated)
 
 class TransformerBlock(nn.Module):
     def __init__(self,d_model=768,num_heads=8,dropout=0.1,init_method="xavier_uniform"):
         super().__init__()
         self.attention = MultiHeadAttention(d_model=d_model,num_heads=num_heads,init_method=init_method)
-        self.ffn = FeedForward(d_model=d_model,init_method=init_method,dropout=dropout)
+        self.ffn = SwiGLUFFN(d_model=d_model,init_method=init_method,dropout=dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
