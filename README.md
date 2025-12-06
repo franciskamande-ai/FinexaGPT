@@ -1,4 +1,5 @@
-# FinexaGPT:Transformer Implementation
+# FinexaGPT: Transformer Implementation
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 A clean, readable GPT implementation that actually makes sense. No magic, no bloat - just the transformer architecture you can understand in an afternoon.
 
 # ⚡ What This Is
@@ -168,8 +169,15 @@ See what breaks
 
 Learn
 
-# 📄 License
-MIT - do whatever you want with it.
+## 📄 License
+
+FinexaGPT is released under the [MIT License](LICENSE).
+
+- **You can:** Use commercially, modify, distribute, private use
+- **You must:** Include original copyright notice
+- **You cannot:** Hold the author liable
+
+See the [LICENSE](LICENSE) file for full terms.
 
 # 🙏 Credits
 Architecture from "Attention Is All You Need"
