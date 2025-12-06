@@ -5,7 +5,6 @@ import tiktoken
 from omegaconf import DictConfig
 
 # Padding to make all sequences in the batch of equal length
-
 def collate_fn(batch):
     input_ids = [item['input_ids'] for item in batch]
     target_ids = [item['target_ids'] for item in batch]
@@ -17,6 +16,34 @@ def collate_fn(batch):
         'input_ids': input_ids,
         'target_ids': target_ids
     }
+    
+'''
+If yoou don't have good Financial Training data just uncomment this function 
+and modify the TextDataset class remove file_path and pass data from this function
+'''
+'''
+# Let's just Load data from HF
+
+def get_mixed_financial_data(sample_size=1000):
+    """Mix of financial and general data for better generalization"""
+    sources = []
+    # 1. Financial specific
+    try:
+        fin_news = load_dataset("zeroshot/twitter-financial-news-tweets", 
+                               split=f"train[:{sample_size//2}]")
+        sources.extend(fin_news['text'])
+    except:
+        pass
+    
+    # 2. General knowledge base (for reasoning)
+    wiki = load_dataset("wikitext", "wikitext-103-raw-v1", 
+                       split=f"train[:{sample_size//2}]")
+    sources.extend(wiki['text'])
+    
+    return sources
+
+data = get_mixed_financial_data()
+'''
 
 class TextDataset(Dataset):
     def __init__(self,cfg:DictConfig, file_path, max_length, tokenizer_name):
