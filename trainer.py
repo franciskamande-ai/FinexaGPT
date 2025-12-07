@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import math
 from omegaconf import DictConfig
-import tqdm
+from tqdm.auto import tqdm
+
 # TODO:
 '''
 There is an error here:
