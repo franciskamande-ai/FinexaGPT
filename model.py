@@ -33,6 +33,17 @@ def look_ahead_mask(seq_length):
     mask = (mask == 0)
     return mask
 
+class RMSNorM(nn.Module):
+    def __init__(self,dim,eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+    def forward(self,x):
+        rsm = torch.sqrt(torch.mean(x**2,dim=-1,keepdim=True)+self.eps)
+
+        normalized = x/rsm
+
+        return normalized * self.weight
 
 class MultiHeadAttention(nn.Module):
     def __init__(self,d_model,num_heads,init_method = "xavier_uniform"):
@@ -127,15 +138,15 @@ class SwiGLUFFN(nn.Module):
     def forward(self,x):
      gate = F.silu(self.layer2)
      activated = self.layer1 * gate
-        return self.layer3(activated)
+     return self.layer3(activated)
 
 class TransformerBlock(nn.Module):
     def __init__(self,d_model=768,num_heads=8,dropout=0.1,init_method="xavier_uniform"):
         super().__init__()
         self.attention = MultiHeadAttention(d_model=d_model,num_heads=num_heads,init_method=init_method)
         self.ffn = SwiGLUFFN(d_model=d_model,init_method=init_method,dropout=dropout)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.norm1 = RMSNorM(d_model)
+        self.norm2 = RMSNorM(d_model)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self,x):
@@ -173,7 +184,7 @@ class Transformer(nn.Module):
             for _ in range(num_layers)
         ])
 
-        self.final_norm = nn.LayerNorm(d_model)
+        self.final_norm = RMSNorM(d_model)
         self.lm_head = nn.Linear(d_model, vocab_size)
         self.lm_head.weight = self.token_embeddings.weight
 
