@@ -35,12 +35,14 @@ def main(cfg: DictConfig):
     print("\n[2/4] Creating model...")
     
     model = Transformer(
-        num_heads=cfg.model.n_heads,
+        num_q_heads=cfg.model.num_q_heads,
+        num_kv_heads=cfg.model.num_kv_heads
         d_model=cfg.model.d_model,
         num_layers=cfg.model.n_layers,
         dropout=cfg.model.dropout,
         vocab_size=vocab_size,
-        max_seq_length=cfg.model.max_seq_length
+        max_seq_length=cfg.model.max_seq_length,
+        use_flash=cfg.model.use_flash
     )
     
     device = torch.device(cfg.system.device if torch.cuda.is_available() and cfg.system.device == "cuda" else "cpu")

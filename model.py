@@ -5,26 +5,10 @@ import math
 
 # Welcome:
 '''
-This is either gonna get educative or weird any way
-i gotta say this before i forget we'll be using a mix of Hydra and DictConfig
-from omegaConf for our configuration management
-'''
-
-'''
-Yeah you saw that am sorry what a bummer!
- Yes (scaled-dot-product attention) don't mind
- me am on the way to implement Grouped Query attention but i keep on forgetting
-'''
-'''
 TODO:
--Change attention to GQA(Grouped Query Attention)
--Implement Flash Attention for optimization
 -Implement model parallelism for large models
--Change LayerNorm to RMSNorm for better training stability
 -Change positional encoding to rotary embeddings for better extrapolation
--Change initialization to SwiGLU for better convergence ==> DONE(By:https://github.com/franciskamande-ai/)
 '''
-# If you can help with that TODO feel free to send a pull request : Thankyou in advance
 
 # Helper function to create look-ahead mask
 def look_ahead_mask(seq_length):
@@ -45,24 +29,27 @@ class RMSNorM(nn.Module):
 
         return normalized * self.weight
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self,d_model,num_heads,init_method = "xavier_uniform"):
+class GroupedQueryAttention(nn.Module):
+    def __init__(self,d_model,num_q_heads,num_kv_heads,init_method = "xavier_uniform",use_flash=True):
         super().__init__()
         self.d_model = d_model
-        self.num_heads = num_heads
+        self.num_q_heads = num_q_heads
+        self.num_kv_heads = num_kv_heads
 
         self.init_method = init_method
 
-        self.d_k = d_model // num_heads
+        self.use_flash = use_flash
 
-        assert d_model // num_heads,"d_model must be divisible by num_heads"
+        self.d_k = d_model // num_q_heads
+
+        assert d_model // num_q_heads,"d_model must be divisible by num_heads"
 
         self.scale = math.sqrt(self.d_k)
 
-        self.w_k = nn.Linear(d_model,d_model)
-        self.w_q = nn.Linear(d_model,d_model)
-        self.w_v = nn.Linear(d_model,d_model)
-        self.w_0 = nn.Linear(d_model,d_model)
+        self.w_0 = nn.Linear(d_model,self.d_k)
+        self.w_k = nn.Linear(d_model,self.d_k)
+        self.w_q = nn.Linear(d_model,self.d_k)
+        self.w_v = nn.Linear(d_model,self.d_k)
 
         self._initialize_weights()
 
@@ -77,27 +64,43 @@ class MultiHeadAttention(nn.Module):
                 torch.nn.init.constant_(layer.bias,0.0)
 
     def forward(self,x,mask=None):
-        batch_size,seq_length,d_model = x.shape
+        batch_size,seq_length,_ = x.shape
 
-        K = self.w_k(x).view(batch_size,seq_length,self.num_heads,self.d_k).transpose(1,2)
-        Q = self.w_q(x).view(batch_size,seq_length,self.num_heads,self.d_k).transpose(1,2)
-        V = self.w_v(x).view(batch_size,seq_length,self.num_heads,self.d_k).transpose(1,2)
+        Q = self.w_q(x).view(batch_size,seq_length,self.num_q_heads,self.d_k).transpose(1,2)
 
-        scores = torch.matmul(Q,K.transpose(-2,-1))/self.scale
+        K = self.w_k(x).view(batch_size,seq_length,self.num_kv_heads,self.d_k).transpose(1,2)
+        V = self.w_v(x).view(batch_size,seq_length,self.num_kv_heads,self.d_k).transpose(1,2)
 
-        if mask is None:
-            mask = look_ahead_mask(seq_length).to(x.device)
-        if mask is not None:
-            scores = scores.masked_fill(mask,float('-inf'))
+        repeat_factor = self.d_model/(self.num_q_heads/self.num_kv_heads)
 
-        scores = F.softmax(scores,dim=-1)
+        K = K.repeat_interleave(repeat_factor,dim=2)
 
-        scores = torch.matmul(scores,V)
+        V = V.repeat_interleave(repeat_factor,dim=2)
+        
+        if self.use_flash:
+            scores = F.scaled_dot_product_attention(
+                Q,K,V,
+                attention_mask=None,
+                dropout_p = 0.0,
+                is_causal = True
+            )
 
-        scores = scores.transpose(1,2).contiguous().view(batch_size,seq_length,d_model)
+        else:
+            scores = torch.matmul(Q,K.transpose(-2,-1))/self.scale
 
-        scores = self.w_0(scores)
-        return scores
+            if mask is None:
+                mask = look_ahead_mask(seq_length).to(x.device)
+            if mask is not None:
+                scores = scores.masked_fill(mask,float('-inf'))
+
+            scores = F.softmax(scores,dim=-1)
+
+            scores = torch.matmul(scores,V)
+
+            scores = scores.transpose(1,2).contiguous().view(batch_size,seq_length,self.d_model)
+
+            scores = self.w_0(scores)
+            return scores
 
 class SwiGLUFFN(nn.Module):
     def __init__(self,d_model,init_method = "xavier_uniform",dropout = 0.1):
@@ -112,28 +115,13 @@ class SwiGLUFFN(nn.Module):
         self._initialize_weights()
 
     def _initialize_weights(self):
-        if self.init_method == "xavier_uniform":
-            nn.init.xavier_uniform_(self.layer1.weight)
-        if self.init_method == "xavier_normal":
-            nn.init.xavier_normal_(self.layer1.weight)
-
-        if self.layer1.bias is not None:
-            nn.init.constant_(self.layer1.bias,0.0)
-
-        if self.init_method == "xavier_uniform":
-            nn.init.xavier_uniform_(self.layer2.weight)
-        if self.init_method == "xavier_normal":
-            nn.init.xavier_normal_(self.layer2.weight)
-
-        if self.layer3.bias is not None:
-            nn.init.constant_(self.layer3.bias,0.0)
-        if self.init_method == "xavier_uniform":
-            nn.init.xavier_uniform_(self.layer3.weight)
-        if self.init_method == "xavier_normal":
-            nn.init.xavier_normal_(self.layer3.weight)
-
-        if self.layer3.bias is not None:
-            nn.init.constant_(self.layer3.bias,0.0)
+        for layer in [self.layer1,self.layer2,self.layer3]:
+            if self.init_method == "xaivier_uniform":
+                torch.nn.init.xavier_uniform_(layer.weight)
+            elif self.init_method =="xavier_normal":
+                torch.nn.init.xavier_normal_(layer.weight)
+            if layer.bias is not None:
+                torch.nn.constant_(layer.bias,0.0)
 
     def forward(self,x):
      gate = F.silu(self.layer2)
@@ -141,9 +129,9 @@ class SwiGLUFFN(nn.Module):
      return self.layer3(activated)
 
 class TransformerBlock(nn.Module):
-    def __init__(self,d_model=768,num_heads=8,dropout=0.1,init_method="xavier_uniform"):
+    def __init__(self,d_model=768,num_q_heads=8,num_kv_heads=2,dropout=0.1,init_method="xavier_uniform",use_flash=True):
         super().__init__()
-        self.attention = MultiHeadAttention(d_model=d_model,num_heads=num_heads,init_method=init_method)
+        self.attention = GroupedQueryAttention(d_model=d_model,num_q_heads=num_q_heads,num_kv_heads=num_kv_heads,init_method=init_method,use_flash=True)
         self.ffn = SwiGLUFFN(d_model=d_model,init_method=init_method,dropout=dropout)
         self.norm1 = RMSNorM(d_model)
         self.norm2 = RMSNorM(d_model)
@@ -161,10 +149,11 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, num_heads=12, d_model=768, num_layers=12, 
-                 dropout=0.1, vocab_size=50000, max_seq_length=512):
+    def __init__(self, num_q_heads=12,num_kv_heads=2, d_model=768, num_layers=12, 
+                 dropout=0.1, vocab_size=50000, max_seq_length=512,use_flash=True):
         super().__init__()
-        self.num_heads = num_heads
+        self.num_heads = num_q_heads
+        self.num_kv_heads = num_kv_heads
         self.d_model = d_model
         self.num_layers = num_layers
         self.dropout = nn.Dropout(dropout)
@@ -177,9 +166,11 @@ class Transformer(nn.Module):
         self.blocks = nn.ModuleList([
             TransformerBlock(
                 d_model=d_model, 
-                num_heads=num_heads, 
+                num_q_heads=num_q_heads,
+                num_kv_heads = num_kv_heads, 
                 dropout=dropout, 
-                init_method="xavier_uniform"
+                init_method="xavier_uniform",
+                use_flash = use_flash
             )
             for _ in range(num_layers)
         ])
@@ -251,7 +242,7 @@ class Transformer(nn.Module):
             idx = torch.cat([idx,next_idx],dim=1)
         return idx
 
-model = Transformer(num_heads=12,d_model=768,num_layers=12,dropout=0.1,vocab_size=50000,max_seq_length=512)
+model = Transformer(num_q_heads=12,num_kv_heads=4,d_model=768,num_layers=12,dropout=0.1,vocab_size=50000,max_seq_length=512,use_flash=True)
 
 parameters = sum(p.numel() for p in model.parameters())
 
