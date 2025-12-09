@@ -3,13 +3,47 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-# Welcome:
-'''
-TODO:
--Implement model parallelism for large models
--Change positional encoding to rotary embeddings for better extrapolation
-'''
+def get_frequencies(dim,seq_length,base=10000):
+    theta = 1.0 / (base ** torch.arange(0,dim,2).float()/dim)
 
+    positions = torch.arange(seq_length)
+
+    angles = torch.outer(positions,theta)
+
+    cos = torch.cos(angles)
+    sin = torch.sin(angles)
+
+    return cos , sin
+
+ # Cos has shape (seq,dim///2) sin too ...so i need to match this when applying rope
+
+def apply_rope(Q,K,cos,sin):
+
+    batch,heads,seq,dim = Q.shape 
+
+    Q_ = Q.reshape(batch,heads,seq,dim//2,2)
+    K_ = K.reshape(batch,heads,seq,dim//2,2)
+
+    Q1,Q2 = Q_[...,0],Q_[...,1]
+    K1,K2 = K_[...,0],K_[...,1]
+
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+
+    Q_rotated = torch.stack([
+        Q1*cos - Q2 * sin,
+        Q2* sin + Q1*cos
+    ],dim=-1)
+
+    K_rotated = torch.stack([
+        K1 * cos - K2 * sin,
+        K2 * sin + K1 * cos
+    ],dim=-1)
+
+    Q = Q_rotated.flatten(start_dim=-2)
+    K = K_rotated.flatten(start_dim=-2)
+
+    return Q,K
 # Helper function to create look-ahead mask
 def look_ahead_mask(seq_length):
     mask = torch.ones(seq_length,seq_length)
@@ -23,9 +57,9 @@ class RMSNorM(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
     def forward(self,x):
-        rsm = torch.sqrt(torch.mean(x**2,dim=-1,keepdim=True)+self.eps)
+        rms = torch.sqrt(torch.mean(x**2,dim=-1,keepdim=True)+self.eps)
 
-        normalized = x/rsm
+        normalized = x/rms
 
         return normalized * self.weight
 
@@ -46,10 +80,12 @@ class GroupedQueryAttention(nn.Module):
 
         self.scale = math.sqrt(self.d_k)
 
-        self.w_0 = nn.Linear(d_model,self.d_k)
-        self.w_k = nn.Linear(d_model,self.d_k)
-        self.w_q = nn.Linear(d_model,self.d_k)
-        self.w_v = nn.Linear(d_model,self.d_k)
+        self.kv_dim = (d_model//num_q_heads) * num_kv_heads
+
+        self.w_0 = nn.Linear(d_model,self.d_model)
+        self.w_k = nn.Linear(d_model,self.kv_dim)
+        self.w_q = nn.Linear(d_model,self.d_model)
+        self.w_v = nn.Linear(d_model,self.kv_dim)
 
         self._initialize_weights()
 
@@ -71,25 +107,38 @@ class GroupedQueryAttention(nn.Module):
         K = self.w_k(x).view(batch_size,seq_length,self.num_kv_heads,self.d_k).transpose(1,2)
         V = self.w_v(x).view(batch_size,seq_length,self.num_kv_heads,self.d_k).transpose(1,2)
 
-        repeat_factor = self.d_model/(self.num_q_heads/self.num_kv_heads)
+        repeat_factor = self.num_q_heads // self.num_kv_heads
 
-        K = K.repeat_interleave(repeat_factor,dim=2)
+        # Q Shape so i can remember when passing RoPE (batch_size,num_h,seq,dim_head)
 
-        V = V.repeat_interleave(repeat_factor,dim=2)
-        
+        K = K.repeat_interleave(repeat_factor,dim=1) 
+
+        V = V.repeat_interleave(repeat_factor,dim=1) 
+
+        cos,sin = get_frequencies(self.d_k,seq_length) # Always use d_k != d_model
+
+        Q,K = apply_rope(Q,K,cos.to(x.device),sin.to(x.device))
+
         if self.use_flash:
             scores = F.scaled_dot_product_attention(
                 Q,K,V,
-                attention_mask=None,
+                attn_mask=None,
                 dropout_p = 0.0,
                 is_causal = True
             )
+            scores = scores.transpose(1, 2).contiguous().view(batch_size, seq_length, -1)
+
+            scores = self.w_0(scores)
+
+            return scores
+
 
         else:
             scores = torch.matmul(Q,K.transpose(-2,-1))/self.scale
 
             if mask is None:
                 mask = look_ahead_mask(seq_length).to(x.device)
+
             if mask is not None:
                 scores = scores.masked_fill(mask,float('-inf'))
 
@@ -116,16 +165,16 @@ class SwiGLUFFN(nn.Module):
 
     def _initialize_weights(self):
         for layer in [self.layer1,self.layer2,self.layer3]:
-            if self.init_method == "xaivier_uniform":
+            if self.init_method == "xavier_uniform":
                 torch.nn.init.xavier_uniform_(layer.weight)
             elif self.init_method =="xavier_normal":
                 torch.nn.init.xavier_normal_(layer.weight)
             if layer.bias is not None:
-                torch.nn.constant_(layer.bias,0.0)
+                torch.nn.init.constant_(layer.bias,0.0)
 
     def forward(self,x):
-     gate = F.silu(self.layer2)
-     activated = self.layer1 * gate
+     gate = F.silu(self.layer2(x))
+     activated = self.layer1(x) * gate
      return self.layer3(activated)
 
 class TransformerBlock(nn.Module):
@@ -149,7 +198,7 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, num_q_heads=12,num_kv_heads=2, d_model=768, num_layers=12, 
+    def __init__(self, num_q_heads=12,num_kv_heads=2, d_model=768, num_layers=12,
                  dropout=0.1, vocab_size=50000, max_seq_length=512,use_flash=True):
         super().__init__()
         self.num_heads = num_q_heads
@@ -161,14 +210,13 @@ class Transformer(nn.Module):
         self.vocab_size = vocab_size
 
         self.token_embeddings = nn.Embedding(self.vocab_size, self.d_model)
-        self.positional_embeddings = nn.Embedding(self.max_seq_length, self.d_model)
 
         self.blocks = nn.ModuleList([
             TransformerBlock(
-                d_model=d_model, 
+                d_model=d_model,
                 num_q_heads=num_q_heads,
-                num_kv_heads = num_kv_heads, 
-                dropout=dropout, 
+                num_kv_heads = num_kv_heads,
+                dropout=dropout,
                 init_method="xavier_uniform",
                 use_flash = use_flash
             )
@@ -198,14 +246,9 @@ class Transformer(nn.Module):
                 f"Sequnce {seq_length} is greater than Maximum {self.max_seq_length}"
                 )
 
-        pos = torch.arange(0,seq_length,dtype=torch.long,device=idx.device)
-
-        pos_emb = self.positional_embeddings(pos)
-        pos_emb = pos_emb.unsqueeze(0)
-
         token_emb = self.token_embeddings(idx)
 
-        x = pos_emb + token_emb
+        x =token_emb
 
         for i, block in enumerate(self.blocks):
             x = block(x)
@@ -247,3 +290,12 @@ model = Transformer(num_q_heads=12,num_kv_heads=4,d_model=768,num_layers=12,drop
 parameters = sum(p.numel() for p in model.parameters())
 
 print(f"Total Parameters: {parameters:,}")
+
+
+# A little Testing
+test_input = torch.randint(0, 50000, (2, 32))
+try:
+    output, loss = model(test_input, test_input)
+    print("Forward pass works!")
+except Exception as e:
+    print(f"Error: {e}")
