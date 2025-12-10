@@ -4,19 +4,6 @@ import math
 from omegaconf import DictConfig
 from tqdm.auto import tqdm
 
-# TODO:
-'''
-There is an error here:
-The train_epoch function tries to enumerate a tuple
-while our dataset class return's a dictionary ot input/output_ids  # SOLVED
-Fix: access data n the epoch via batch['input_ids']
-WILL DO IT LATER
-'''
-
-'''
-Implementing tqdm to show progress could be fun 
-and maybe beneficial to the one  training        # SOLVED
-'''
 
 class Trainer(nn.Module):
     def __init__(self, model, cfg: DictConfig):

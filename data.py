@@ -29,14 +29,14 @@ def get_mixed_financial_data(sample_size=1000):
     sources = []
     # 1. Financial specific
     try:
-        fin_news = load_dataset("zeroshot/twitter-financial-news-tweets", 
+        fin_news = load_dataset("artefactory/Argimi-Ardian-Finance-10k-text", 
                                split=f"train[:{sample_size//2}]")
         sources.extend(fin_news['text'])
     except:
         pass
     
     # 2. General knowledge base (for reasoning)
-    wiki = load_dataset("wikitext", "wikitext-103-raw-v1", 
+    wiki = load_dataset("HuggingFaceFW/fineweb", "default", 
                        split=f"train[:{sample_size//2}]")
     sources.extend(wiki['text'])
     
@@ -91,8 +91,7 @@ def get_data_loader(cfg : DictConfig,file_path, batch_size, block_size, tokenize
         shuffle=True,
         collate_fn=collate_fn,
         drop_last=True,
-        num_workers=4,
-        pin_memory=True
+        num_workers=2
     )
     
     return dataloader, vocab_size, dataset
