@@ -112,17 +112,19 @@ training:
 # 🤝 Want to Help?
 See the TODO in model.py:
 
-GQA - Grouped Query Attention (memory efficient)
+GQA - Grouped Query Attention (memory efficient) ==> Done
 
-Flash Attention - Faster attention computation
+Flash Attention - Faster attention computation ==> Done
 
-RMSNorm - Better than LayerNorm
+RMSNorm - Better than LayerNorm ==> Done
 
-RoPE - Rotary positional embeddings
+RoPE - Rotary positional embeddings ==> Done
 
-SwiGLU - Better activation function
+SwiGLU - Better activation function ==> Done
 
-How to contribute:
+Model Parallelism 
+
+# How to contribute:
 
 Fork the repo
 
